@@ -106,6 +106,9 @@ export const sendOtp = async (req, res) => {
         user: process.env.SMTP_EMAIL,
         pass: process.env.SMTP_APP_PASSWORD,
       },
+       tls: {
+    rejectUnauthorized: false
+  }
     });
 
     const subject =
