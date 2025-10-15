@@ -133,7 +133,7 @@ export const sendOtp = async (req, res) => {
     res.status(500).json({ success: false, error: "Failed to send OTP" });
   }
 };
-
+router.post("/send-otp", sendOtp);
 
 // Verify OTP
 export const verifyOtp = async (req, res) => {
