@@ -73,7 +73,6 @@ function generateOtp() {
 //   }
 // };
 // router.post("/send-otp", sendOtp);
-import nodemailer from "nodemailer";
 
 export const sendOtp = async (req, res) => {
   try {
