@@ -119,7 +119,7 @@ export const sendOtp = async (req, res) => {
     await transporter.sendMail({
       from: process.env.SMTP_EMAIL,
       to: email,
-      subject:ntg,
+      subject:`Your OTP is ${otp}. It expires in 10 minutes.`,
       text: `Your OTP is ${otp}. It expires in 10 minutes.`,
     });
 
