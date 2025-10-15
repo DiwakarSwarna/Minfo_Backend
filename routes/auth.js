@@ -75,56 +75,179 @@ function generateOtp() {
 // router.post("/send-otp", sendOtp);
 
 export const sendOtp = async (req, res) => {
-  try {
-    const { email, type } = req.body; // type = 'register' or 'forgotPassword'
-    const existingUser = await User.findOne({ email });
-
-    if (type === "register" && existingUser) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Email already registered" });
-    }
-
-    if (type === "forgotPassword" && !existingUser) {
-      return res
-        .status(404)
-        .json({ success: false, message: "No account found with this email" });
-    }
-
-    const otp = generateOtp();
-    const otpExpiresAt = Date.now() + 10 * 60 * 1000;
-
-    await EmailVerification.findOneAndUpdate(
-      { email },
-      { email, otp, otpExpiresAt, isVerified: false, purpose: type },
-      { upsert: true, new: true }
-    );
-
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.SMTP_EMAIL,
-        pass: process.env.SMTP_APP_PASSWORD,
-      },
-    });
-
-    const subject =
-      type === "forgotPassword"
-        ? "OTP for Password Reset - Mango App"
-        : "OTP for Email Verification - Mango App";
-
-    await transporter.sendMail({
-      from: process.env.SMTP_EMAIL,
-      to: email,
-      subject,
-      text: `Your OTP is ${otp}. It expires in 10 minutes.`,
-    });
-
-    res.json({ success: true, message: "OTP sent to email" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, error: "Failed to send OTP" });
+  // helper to print timestamped logs
+  function tlog(...args) {
+    console.log(new Date().toISOString(), ...args);
   }
+
+  router.post("/send-otp", async (req, res) => {
+    tlog("==> send-otp handler START");
+    try {
+      const { email, type } = req.body; // type = 'register' or 'forgotPassword'
+      tlog("Incoming payload:", { email, type });
+
+      const existingUser = await User.findOne({ email });
+      tlog("DB: looked up existingUser:", !!existingUser);
+
+      if (type === "register" && existingUser) {
+        tlog("Validation: register but email exists -> returning 400");
+        return res
+          .status(400)
+          .json({ success: false, message: "Email already registered" });
+      }
+
+      if (type === "forgotPassword" && !existingUser) {
+        tlog("Validation: forgotPassword but no user -> returning 404");
+        return res.status(404).json({
+          success: false,
+          message: "No account found with this email",
+        });
+      }
+
+      const otp = generateOtp();
+      const otpExpiresAt = Date.now() + 10 * 60 * 1000;
+      tlog("Generated OTP and expiry", { otp, otpExpiresAt });
+
+      const upsertResult = await EmailVerification.findOneAndUpdate(
+        { email },
+        { email, otp, otpExpiresAt, isVerified: false, purpose: type },
+        { upsert: true, new: true }
+      );
+      tlog("DB: upserted EmailVerification:", !!upsertResult);
+
+      // Log environment presence (mask sensitive values)
+      const smtpEmail = process.env.SMTP_EMAIL || "<missing>";
+      const smtpPass = process.env.SMTP_APP_PASSWORD
+        ? "*****masked*****"
+        : "<missing>";
+      tlog("Env check:", {
+        SMTP_EMAIL: smtpEmail,
+        SMTP_APP_PASSWORD: smtpPass,
+      });
+
+      // --- TRANSPORTER CONFIG: tweak as needed ---
+      // Option A: using 'service: "gmail"' (simple). If Render blocks default ports this can time out.
+      const transporterConfigA = {
+        service: "gmail",
+        auth: {
+          user: process.env.SMTP_EMAIL,
+          pass: process.env.SMTP_APP_PASSWORD,
+        },
+        logger: true,
+        debug: true,
+      };
+
+      // Option B: explicit SMTP via smtp.gmail.com (use port 465 for secure or 587 for TLS)
+      const transporterConfigB = {
+        host: "smtp.gmail.com",
+        port: 465, // try 465 (secure) or 587 (starttls)
+        secure: true, // true for 465, false for 587
+        auth: {
+          user: process.env.SMTP_EMAIL,
+          pass: process.env.SMTP_APP_PASSWORD,
+        },
+        requireTLS: true,
+        connectionTimeout: 10 * 1000, // 10s
+        greetingTimeout: 10 * 1000,
+        socketTimeout: 10 * 1000,
+        logger: true,
+        debug: true,
+        tls: {
+          // don't fail on self-signed certs (use only for debugging)
+          rejectUnauthorized: false,
+        },
+      };
+
+      // Choose which config to use here:
+      const useConfig = transporterConfigB; // change to transporterConfigA to test 'service: "gmail"'
+      tlog("Creating transporter with config summary:", {
+        host: useConfig.host || "(service:gmail)",
+        port: useConfig.port,
+        secure: useConfig.secure,
+      });
+
+      const transporter = nodemailer.createTransport(useConfig);
+
+      // VERIFICATION step: will surface connection errors quickly
+      try {
+        tlog("Calling transporter.verify() ...");
+        const verifyResult = await transporter.verify();
+        tlog("transporter.verify() SUCCESS:", verifyResult);
+      } catch (verifyErr) {
+        // This is a very important log: shows connection level problems (ports blocked, DNS, auth).
+        tlog("transporter.verify() FAILED:");
+        tlog("verifyErr.name:", verifyErr && verifyErr.name);
+        tlog("verifyErr.code:", verifyErr && verifyErr.code);
+        tlog("verifyErr.message:", verifyErr && verifyErr.message);
+        tlog("verifyErr.stack:", verifyErr && verifyErr.stack);
+        // include nodemailer-specific fields if present
+        if (verifyErr && verifyErr.response)
+          tlog("verifyErr.response:", verifyErr.response);
+        // respond early with verbose error to help debugging (remove in production)
+        return res.status(500).json({
+          success: false,
+          error: "SMTP verify failed",
+          details: {
+            name: verifyErr && verifyErr.name,
+            code: verifyErr && verifyErr.code,
+            message: verifyErr && verifyErr.message,
+          },
+        });
+      }
+
+      const subject =
+        type === "forgotPassword"
+          ? "OTP for Password Reset - Mango App"
+          : "OTP for Email Verification - Mango App";
+
+      const mailOptions = {
+        from: process.env.SMTP_EMAIL,
+        to: email,
+        subject,
+        text: `Your OTP is ${otp}. It expires in 10 minutes.`,
+      };
+
+      tlog("Sending mail with options summary:", {
+        from: mailOptions.from,
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+      });
+
+      try {
+        const info = await transporter.sendMail(mailOptions);
+        tlog("sendMail SUCCESS. info.messageId:", info && info.messageId);
+        // nodemailer often returns accepted/rejected arrays
+        if (info && info.accepted) tlog("sendMail accepted:", info.accepted);
+        if (info && info.rejected) tlog("sendMail rejected:", info.rejected);
+        tlog("Full sendMail info object:", info);
+        return res.json({ success: true, message: "OTP sent to email", info });
+      } catch (sendErr) {
+        tlog("sendMail FAILED:");
+        tlog("sendErr.name:", sendErr && sendErr.name);
+        tlog("sendErr.code:", sendErr && sendErr.code);
+        tlog("sendErr.message:", sendErr && sendErr.message);
+        tlog("sendErr.stack:", sendErr && sendErr.stack);
+        if (sendErr && sendErr.response)
+          tlog("sendErr.response:", sendErr.response);
+        return res.status(500).json({
+          success: false,
+          error: "Failed to send mail",
+          details: {
+            name: sendErr && sendErr.name,
+            code: sendErr && sendErr.code,
+            message: sendErr && sendErr.message,
+          },
+        });
+      }
+    } catch (error) {
+      tlog("Unexpected ERROR in send-otp handler:", error && error.stack);
+      res
+        .status(500)
+        .json({ success: false, error: "Failed to send OTP (unexpected)" });
+    } finally {
+      tlog("==> send-otp handler END");
+    }
+  });
 };
 router.post("/send-otp", sendOtp);
 
