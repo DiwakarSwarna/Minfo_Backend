@@ -73,10 +73,11 @@ function generateOtp() {
 //   }
 // };
 // router.post("/send-otp", sendOtp);
+import nodemailer from "nodemailer";
 
 export const sendOtp = async (req, res) => {
   try {
-    const { email, type } = req.body; // type = 'register' or 'forgotPassword'
+    const { email, type } = req.body; // 'register' or 'forgotPassword'
     const existingUser = await User.findOne({ email });
 
     if (type === "register" && existingUser) {
@@ -100,15 +101,19 @@ export const sendOtp = async (req, res) => {
       { upsert: true, new: true }
     );
 
+    // Gmail transporter
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false, // TLS
       auth: {
-        user: process.env.SMTP_EMAIL,
-        pass: process.env.SMTP_APP_PASSWORD,
+        user: process.env.SMTP_EMAIL,        // your Gmail address
+        pass: process.env.SMTP_APP_PASSWORD, // Gmail App Password
       },
-       tls: {
-    rejectUnauthorized: false
-  }
+      tls: {
+        rejectUnauthorized: false, // important for cloud environments
+      },
+      connectionTimeout: 10000, // optional: 10s timeout
     });
 
     const subject =
@@ -119,17 +124,17 @@ export const sendOtp = async (req, res) => {
     await transporter.sendMail({
       from: process.env.SMTP_EMAIL,
       to: email,
-      subject:`Your OTP is ${otp}. It expires in 10 minutes.`,
+      subject,
       text: `Your OTP is ${otp}. It expires in 10 minutes.`,
     });
 
     res.json({ success: true, message: "OTP sent to email" });
   } catch (error) {
-    console.error(error);
+    console.error("Email send error:", error);
     res.status(500).json({ success: false, error: "Failed to send OTP" });
   }
 };
-router.post("/send-otp", sendOtp);
+
 
 // Verify OTP
 export const verifyOtp = async (req, res) => {
