@@ -18,9 +18,7 @@ app.use("/api/farmer", farmerRoutes);
 const PORT = process.env.PORT || 5000;
 // DB + Server
 mongoose
-  .connect(
-    "mongodb+srv://diwakarswarna11_db_user:diwakar11@1@cluster0.bmajsrr.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-  )
+  .connect(process.env.MONGO_URI)
   .then(() => {
     app.listen(PORT, "0.0.0.0", () =>
       // console.log("Server running on http://localhost:5000", PORT)
