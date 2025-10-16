@@ -142,14 +142,93 @@ export const sendOtp = async (req, res) => {
       from: process.env.SMTP_EMAIL || "no-reply@mangoapp.com", // verified sender
       subject,
       text: `Your OTP is ${otp}. It expires in 10 minutes.`,
-      html: `
-        <div style="font-family:sans-serif; padding:10px;">
-          <h3>${subject}</h3>
-          <p>Your OTP is:</p>
-          <h2 style="color:#F4B400;">${otp}</h2>
-          <p>This OTP will expire in <b>10 minutes</b>.</p>
+      html: `<!DOCTYPE html>
+  <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>${subject}</title>
+      <style>
+        body {
+          background-color: #f4f4f4;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          margin: 0;
+          padding: 0;
+          color: #333;
+        }
+        .container {
+          max-width: 600px;
+          margin: 30px auto;
+          background: #ffffff;
+          border-radius: 12px;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+          overflow: hidden;
+        }
+        .header {
+          background-color: #ffca28;
+          text-align: center;
+          padding: 20px 0;
+        }
+        .header h1 {
+          color: #2e2e2e;
+          font-size: 28px;
+          margin: 0;
+          letter-spacing: 1px;
+        }
+        .content {
+          padding: 30px 25px;
+          text-align: center;
+        }
+        .content h2 {
+          font-size: 22px;
+          color: #2e2e2e;
+          margin-bottom: 10px;
+        }
+        .otp {
+          display: inline-block;
+          font-size: 30px;
+          letter-spacing: 6px;
+          background: #fef3c7;
+          color: #d97706;
+          padding: 10px 25px;
+          border-radius: 8px;
+          font-weight: bold;
+          margin: 20px 0;
+        }
+        .footer {
+          text-align: center;
+          background: #fafafa;
+          font-size: 13px;
+          padding: 15px;
+          color: #777;
+        }
+        .footer a {
+          color: #ffb300;
+          text-decoration: none;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Minfo</h1>
         </div>
-      `,
+        <div class="content">
+          <h2>${subject}</h2>
+          <p>Hello,</p>
+          <p>Use the following OTP to verify your email or complete your request:</p>
+          <div class="otp">${otp}</div>
+          <p>This OTP will expire in <strong>10 minutes</strong>.</p>
+          <p>If you didn’t request this, please ignore this message.</p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} Minfo. All rights reserved.</p>
+          <p><a href="https://minfo.vercel.app">Visit Minfo</a></p>
+        </div>
+      </div>
+    </body>
+  </html>
+`,
     };
 
     tlog("Sending mail with SendGrid options summary:", {
