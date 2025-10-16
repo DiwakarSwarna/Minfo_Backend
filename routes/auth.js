@@ -165,7 +165,7 @@ export const sendOtp = async (req, res) => {
           overflow: hidden;
         }
         .header {
-          background-color: #ffca28;
+          background-color: #1b7903ff;
           text-align: center;
           padding: 20px 0;
         }
